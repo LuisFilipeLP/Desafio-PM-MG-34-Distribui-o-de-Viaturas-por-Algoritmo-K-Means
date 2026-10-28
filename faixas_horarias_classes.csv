@@ -1,0 +1,25 @@
+ranking,faixa,n_ocorrencias,soma_pesos,classe,modalidade
+1,10:00-10:59,98,286,1,ponto-base 20/40 (raio 1 km)
+2,20:00-20:59,91,283,1,ponto-base 20/40 (raio 1 km)
+3,08:00-08:59,86,263,1,ponto-base 20/40 (raio 1 km)
+4,07:00-07:59,84,262,1,ponto-base 20/40 (raio 1 km)
+5,09:00-09:59,87,260,1,ponto-base 20/40 (raio 1 km)
+6,14:00-14:59,79,235,1,ponto-base 20/40 (raio 1 km)
+7,11:00-11:59,79,234,1,ponto-base 20/40 (raio 1 km)
+8,18:00-18:59,77,234,1,ponto-base 20/40 (raio 1 km)
+9,17:00-17:59,77,233,2,ponto-base 20/40 (raio 1 km)
+10,16:00-16:59,74,224,2,ponto-base 20/40 (raio 1 km)
+11,22:00-22:59,70,221,2,ponto-base 20/40 (raio 1 km)
+12,21:00-21:59,68,216,2,ponto-base 20/40 (raio 1 km)
+13,13:00-13:59,72,214,2,patrulhamento até 2 km
+14,19:00-19:59,66,205,2,patrulhamento até 2 km
+15,15:00-15:59,67,197,2,patrulhamento até 2 km
+16,12:00-12:59,69,192,2,patrulhamento até 2 km
+17,03:00-03:59,57,177,3,patrulhamento até 3 km
+18,02:00-02:59,55,174,3,patrulhamento até 3 km
+19,23:00-23:59,55,158,3,patrulhamento até 3 km
+20,06:00-06:59,48,146,3,patrulhamento até 3 km
+21,00:00-00:59,43,122,3,patrulhamento até 3 km
+22,01:00-01:59,37,116,3,patrulhamento até 3 km
+23,05:00-05:59,35,109,3,patrulhamento até 3 km
+24,04:00-04:59,31,98,3,patrulhamento até 3 km

@@ -1,0 +1,139 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cartão-Programa dinâmico – 39ª CIA PM</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font:13px system-ui,sans-serif;color:#1c1c1c}
+body{display:flex}#map{flex:1;min-width:0}#side{width:430px;overflow:auto;background:#f4f5f7;padding:10px;border-left:1px solid #ccc}
+.box{background:#fff;border-radius:8px;padding:9px 10px;margin-bottom:9px;box-shadow:0 1px 4px #0002}
+h1{font-size:15px;margin:0 0 6px}h4{margin:0 0 5px;font-size:13px}
+#clock{font:600 30px ui-monospace,monospace}.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button{cursor:pointer;border:1px solid #888;background:#fff;border-radius:5px;padding:3px 8px;font:inherit}button:hover{background:#eee}
+input[type=range]{width:100%}.sm{font-size:12px;color:#555}
+.card{border-left:6px solid var(--c)}.card.off{opacity:.6;background:#eee}
+.hd{display:flex;align-items:center;gap:7px;margin-bottom:4px}.hd b{font-size:15px}
+.tag{font-size:11px;border-radius:9px;padding:1px 7px;background:#e3e6ea}
+.st{display:inline-block;font-weight:700;border-radius:5px;padding:2px 8px;color:#fff;margin:3px 0}
+.st.base{background:#c0392b}.st.pat{background:#1e8449}.st.off{background:#555}
+.bar{position:relative;height:16px;background:#ddd;border-radius:3px;overflow:hidden;margin:5px 0 2px;display:flex}
+.bar i{display:block;height:100%}.bar .b{background:#c0392b}.bar .p{background:#58b36f}
+.bar u{position:absolute;top:0;bottom:0;width:2px;background:#000}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:#666}
+details{margin-top:5px}summary{cursor:pointer;color:#145}table{border-collapse:collapse;width:100%;font-size:11.5px}
+td{padding:1px 4px;border-bottom:1px solid #eee}tr.now td{background:#fff3b0;font-weight:700}
+.veh{width:30px;height:30px;border-radius:50%;border:3px solid #fff;color:#fff;font:700 12px/24px system-ui;text-align:center;box-shadow:0 0 5px #000a}
+.veh.base{animation:pl 1s infinite;border-color:#000}.veh.off{background:#666!important;opacity:.7}
+@keyframes pl{0%{box-shadow:0 0 0 0 #c0392bdd}100%{box-shadow:0 0 0 16px #c0392b00}}
+#ov{position:fixed;inset:0;background:#0007;color:#fff;display:none;align-items:center;justify-content:center;font-size:20px;z-index:3000}
+.sw{display:inline-block;width:14px;height:11px;border:1px solid #0006;vertical-align:middle}
+.bal span{display:inline-block;height:9px;vertical-align:middle;margin-right:4px}
+</style></head><body>
+<div id="map"></div>
+<aside id="side">
+<div class="box"><h1>🚓 Cartão-Programa dinâmico · 39ª CIA PM</h1>
+ <div class="row"><span id="clock">00:00</span><button id="play">⏸</button>
+  <select id="spd"><option value="1">1 min/s</option><option value="2" selected>2 min/s</option><option value="5">5 min/s</option><option value="10">10 min/s</option><option value="30">30 min/s</option></select>
+  <span class="sm" id="hcl"></span></div>
+ <input id="sl" type="range" min="0" max="1439" value="420">
+ <div class="row sm" style="margin-top:4px">Cenários:
+  <button onclick="cen([])">1 · Todas</button><button onclick="cen(['V3'])">2 · V3 empenhada</button><button onclick="cen(['V2','V4'])">3 · V2 + V4</button></div></div>
+<div class="box"><h4>Camadas</h4><div class="row">
+ <label>Colorir por <select id="mode"><option value="reg">Região da viatura</option><option value="prio">Prioridade (nível)</option></select></label>
+ <label><input type="checkbox" id="oc"> ocorrências da hora</label>
+ <label><input type="checkbox" id="rt" checked> rotas/raio</label>
+ <label><input type="checkbox" id="imp" checked> destacar impacto</label></div>
+ <div class="sm" style="margin-top:5px"><span class="sw" style="background:#800026"></span>N5 <span class="sw" style="background:#e31a1c"></span>N4 <span class="sw" style="background:#fd8d3c"></span>N3 <span class="sw" style="background:#fed976"></span>N2 <span class="sw" style="background:#ffffcc"></span>N1 · borda preta = hex. prioritário · tracejado = reatribuído</div></div>
+<div class="box" id="imp-box"><h4>Impacto e cobertura (hora atual)</h4><div id="impact" class="sm"></div></div>
+<div id="cards"></div>
+</aside><div id="ov">Recalculando distribuição (K-Means balanceado)…</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const COL={V1:'#e6194b',V2:'#2e9e44',V3:'#3b5bdb',V4:'#f58231',V5:'#8e44ad',V6:'#00a8a8',V7:'#a0522d',V8:'#d6336c'};
+const NIV=['#ffffff00','#ffffcc','#fed976','#fd8d3c','#e31a1c','#800026'];
+const MOD={base:'Ponto-base 20 min + patrulha 40 min (raio 1 km)',p2:'Patrulhamento até 2 km',p3:'Patrulhamento preventivo até 3 km'};
+const hhmm=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(Math.floor(m%60)).padStart(2,'0');
+let B,P,SEG={},T=420,speed=2,playing=true,busy=false,last=performance.now(),lastH=-1,indisp=[],mk={},lastPos={},blend={},lay={},cen0=null;
+const map=L.map('map',{preferCanvas:true}).setView([-19.86,-44.04],13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:20}).addTo(map);
+const gHex=L.layerGroup().addTo(map),gOc=L.layerGroup().addTo(map),gRt=L.layerGroup().addTo(map),gVeh=L.layerGroup().addTo(map);
+
+const dist=(a,b)=>Math.hypot((a[0]-b[0])*110574,(a[1]-b[1])*104700);
+function cum(p){const c=[0];for(let i=1;i<p.length;i++)c.push(c[i-1]+dist(p[i-1],p[i]));return c}
+function along(x,f){const p=x.path;if(p.length==1)return p[0];const L_=x.cum[x.cum.length-1]*f;let i=1;while(i<p.length-1&&x.cum[i]<L_)i++;
+ const d=x.cum[i]-x.cum[i-1]||1,u=Math.min(1,Math.max(0,(L_-x.cum[i-1])/d));return[p[i-1][0]+(p[i][0]-p[i-1][0])*u,p[i-1][1]+(p[i][1]-p[i-1][1])*u]}
+function build(){SEG={};P.ativas.forEach(v=>{const s=[];P.cartoes[v].forEach(c=>c.atividades.forEach(a=>s.push({...a,h:c.hora,c,t0:c.hora*60+a.ini,t1:c.hora*60+a.fim})));
+ s.forEach((x,i)=>{const pv=s[(i+s.length-1)%s.length];x.path=x.tipo=='base'?[x.rota[0]]:[pv.rota[pv.rota.length-1],...x.rota];x.cum=cum(x.path)});SEG[v]=s})}
+const seg=(v,t)=>SEG[v].find(x=>t>=x.t0&&t<x.t1)||SEG[v][0];
+const hexC=()=>B.hex.map(h=>[h.c.reduce((a,p)=>a+p[1],0)/h.c.length,h.c.reduce((a,p)=>a+p[0],0)/h.c.length]);
+let HC,HL=[];
+
+async function init(){
+ B=await (await fetch('/api/base')).json();HC=hexC();
+ L.geoJSON(B.cia,{style:{color:'#0b3d91',weight:3,fill:false}}).addTo(map);
+ HL=B.hex.map(h=>L.polygon(h.c,{weight:.4,color:'#999',fillOpacity:0}).addTo(gHex));
+ await carregar([]);setIndispUI();requestAnimationFrame(frame)}
+async function carregar(ind){busy=true;$('ov').style.display='flex';
+ const old=P;const r=await (await fetch('/api/plano?indisp='+ind.join(','))).json();
+ if(r.erro){alert(r.erro);$('ov').style.display='none';busy=false;return false}
+ P=r;indisp=ind;build();
+ P.ativas.forEach(v=>{if(lastPos[v])blend[v]={from:lastPos[v],t0:T}});
+ cards();lastH=-1;refresh();$('ov').style.display='none';busy=false;last=performance.now();return true}
+async function toggle(v){const s=new Set(indisp);s.has(v)?s.delete(v):s.add(v);if(s.size>=B.K){alert('Ao menos uma viatura deve ficar disponível.');return}
+ await carregar([...s]);}
+async function cen(l){await carregar(l)}
+function setIndispUI(){}
+
+function cards(){
+ $('cards').innerHTML=Object.keys(B.tipos).map(v=>{const off=indisp.includes(v);
+  return `<div class="box card ${off?'off':''}" style="--c:${COL[v]}" id="k-${v}"><div class="hd"><b style="color:${COL[v]}">${v}</b><span class="tag">${B.tipos[v]}</span>
+  <span style="flex:1"></span><button onclick="toggle('${v}')">${off?'✔ Disponibilizar':'⛔ Indisponibilizar (empenhar)'}</button></div>
+  ${off?'<span class="st off">INDISPONÍVEL — empenhada em ocorrência</span><div class="sm">Fora do patrulhamento; área redistribuída entre as demais.</div>':
+  `<span class="st" id="st-${v}"></span><div id="at-${v}"></div><div class="sm" id="lc-${v}"></div>
+  <div class="bar" id="br-${v}"></div><div class="ticks"><span>:00</span><span>:15</span><span>:30</span><span>:45</span><span>:59</span></div>
+  <details><summary>Cartão-Programa completo (24 h)</summary><table>${P.cartoes[v].map(c=>`<tr id="r-${v}-${c.hora}"><td>${String(c.hora).padStart(2,'0')}h</td><td>C${c.classe}</td><td>${c.atividades.filter(a=>c.modal!='base'||a.tipo=='base'||0).map(a=>c.modal=='base'?`base ${hhmm(c.hora*60+a.ini)}–${hhmm(c.hora*60+a.fim)} (hex ${c.ancora.slice(-11)})`:`patrulha ${c.raio/1000} km (centro ${c.ancora.slice(-11)})`).join('')}</td></tr>`).join('')}</table></details>`}
+  </div>`}).join('')}
+
+function refresh(){const h=Math.floor(T/60);lastH=h;const imp=P.impacto[h],reat=new Set($('imp').checked?imp.reatribuidos:[]);
+ const reg=$('mode').value=='reg';
+ HL.forEach((l,i)=>{const n=B.hex[i].nivel[h],pr=P.prio[h][i];
+  l.setStyle({fillColor:reg?COL[P.ativas[P.atrib[h][i]]]:NIV[n],fillOpacity:reg?.18+.1*n:(n?.8:0),
+   color:reat.has(i)?'#000':pr?'#000':'#aaa',weight:reat.has(i)?2:pr?1.8:.3,dashArray:reat.has(i)?'3 3':null})});
+ gOc.clearLayers();if($('oc').checked)B.ocorrencias.filter(o=>o[3]==h).forEach(o=>L.circleMarker([o[0],o[1]],{radius:3,color:'#000',weight:.7,fillColor:'#fff',fillOpacity:1}).bindPopup('Natureza '+o[2]).addTo(gOc));
+ gRt.clearLayers();
+ if($('rt').checked)P.ativas.forEach(v=>{const c=P.cartoes[v][h],col=COL[v],a=B.hex.findIndex(x=>x.id==c.ancora);
+  L.polygon(B.hex[a].c,{color:col,weight:4,fillColor:col,fillOpacity:.5}).bindTooltip(v+' · hex em destaque').addTo(gRt);
+  L.circle([HC[a][1],HC[a][0]],{radius:c.raio,color:col,weight:1.5,dashArray:'6 6',fill:false}).addTo(gRt)});
+ // impacto
+ const tot=B.hex.length,pmax=Math.max(...imp.pesos,1);
+ $('impact').innerHTML=`Atribuição territorial: <b>100%</b> dos ${tot} hexágonos têm viatura responsável (o alcance real de patrulha é o círculo tracejado), distribuídos entre ${P.ativas.length} viatura(s).<br>`+
+  (indisp.length?`Indisponíveis: <b>${indisp.join(', ')}</b> · hexágonos reatribuídos nesta hora: <b>${imp.reatribuidos.length}</b> (${(100*imp.reatribuidos.length/tot).toFixed(0)}%).<br>`:'Cenário base (todas disponíveis).<br>')+
+  `<div class="bal" style="margin-top:4px">`+P.ativas.map((v,j)=>`<div><b style="color:${COL[v]}">${v}</b> <span style="width:${130*imp.pesos[j]/pmax}px;background:${COL[v]}"></span>peso ${imp.pesos[j]} · ${imp.km2[j]} km²</div>`).join('')+`</div>`;
+ P.ativas.forEach(v=>{const c=P.cartoes[v][h];let t=0;
+  $('br-'+v).innerHTML=c.atividades.map(a=>`<i class="${a.tipo=='base'?'b':'p'}" style="width:${(a.fim-a.ini)/.6}%" title="${a.tipo} ${a.ini}–${a.fim} min"></i>`).join('')+'<u id="cu-'+v+'"></u>';
+  document.querySelectorAll(`#k-${v} tr`).forEach(r=>r.classList.remove('now'));const r=$(`r-${v}-${h}`);if(r)r.classList.add('now')});
+ $('hcl').textContent=`Faixa ${String(h).padStart(2,'0')}:00–${String(h).padStart(2,'0')}:59 · Classe ${P.cartoes[P.ativas[0]][h].classe}`}
+
+function frame(now){const dt=(now-last)/1000;last=now;
+ if(!busy){if(playing)T=(T+dt*speed)%1440;
+  if(Math.floor(T/60)!=lastH)refresh();
+  $('clock').textContent=hhmm(T);$('sl').value=Math.floor(T);
+  P.ativas.forEach(v=>{const s=seg(v,T),f=(T-s.t0)/(s.t1-s.t0);let p=along(s,f);const b=blend[v];
+   if(b){const u=Math.min(1,((T-b.t0+1440)%1440)/4);p=[b.from[0]+(p[0]-b.from[0])*u,b.from[1]+(p[1]-b.from[1])*u];if(u>=1)delete blend[v]}
+   lastPos[v]=p;const isb=s.tipo=='base';
+   if(!mk[v]){mk[v]=L.marker(p,{zIndexOffset:1000}).addTo(gVeh)}mk[v].setLatLng(p);
+   const key=v+isb;if(mk[v]._k!=key){mk[v]._k=key;mk[v].setIcon(L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],html:`<div class="veh ${isb?'base':''}" style="background:${COL[v]}">${v}</div>`}))}
+   let near=0,bd=1e9;for(let i=0;i<HC.length;i++){const d=(HC[i][1]-p[0])**2+(HC[i][0]-p[1])**2;if(d<bd){bd=d;near=i}}
+   const st=$('st-'+v);if(!st)return;const m=T%60;
+   st.className='st '+(isb?'base':'pat');
+   st.textContent=isb?`PONTO-BASE · restam ${Math.ceil(s.t1-T)} min`:`PATRULHAMENTO · ${Math.floor(T-s.t0)} min de ${s.t1-s.t0}`;
+   $('at-'+v).innerHTML=`<b>${MOD[s.c.modal]}</b><br><span class="sm">Atividade atual: ${hhmm(s.t0)}–${hhmm(s.t1)} · quadrícula em destaque <code>${s.hex.slice(-11)}</code></span>`;
+   $('lc-'+v).innerHTML=`📍 ${isb?'Parada no':'Próxima ao'} hex <code>${B.hex[near].id}</code> · ${p[0].toFixed(5)}, ${p[1].toFixed(5)}`;
+   const cu=$('cu-'+v);if(cu)cu.style.left=(m/.6)+'%'});
+  Object.keys(mk).forEach(v=>{if(!P.ativas.includes(v)){gVeh.removeLayer(mk[v]);delete mk[v]}})}
+ requestAnimationFrame(frame)}
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'⏸':'▶'};
+$('spd').onchange=e=>speed=+e.target.value;
+$('sl').oninput=e=>{T=+e.target.value;blend={};if(!busy)refresh()};
+['mode','oc','rt','imp'].forEach(i=>$(i).onchange=()=>refresh());
+init();
+</script></body></html>
